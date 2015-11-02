@@ -49,9 +49,9 @@ try:
     # compute signature
     signature = 'sha1=' + hmac.new(token, payload, hashlib.sha1).hexdigest()
 
-    # if data directory present, open log, otherwise open devnull
-    if os.path.isdir('data'):
-      log = open('data/' + signature[5:], 'w')
+    # if logs directory present, open log, otherwise open devnull
+    if os.path.isdir('logs'):
+      log = open('logs/' + signature[5:], 'w')
     else:
       log = open(os.devnull, 'w')
 
@@ -89,8 +89,8 @@ try:
     responses = process.communicate()
 
     # log response
+    log.write("\n\Exit code: %s\n" % process.returncode)
     log.write("\nFetch response:\n%s\n" % "\n".join(responses[-2:]))
-    log.write("\nExit code: %s\n" % process.returncode)
 
     # stop if fetch failed
     if process.returncode != 0:
@@ -112,6 +112,11 @@ try:
       for key, value in event.items():
         os.environ['WEBHOOK_%s' % key.upper()] = json.dumps(value)
 
+      log.write("\nEnvironment variables passed to webhook\n")
+      for key, value in os.environment.items():
+        if key.startswith('WEBHOOK_'):
+           log.write("%s=%s\n", (key, value))
+
       # invoke post-receive hook
       # NOTE: stderr will show up in the web server's error log
       cwd = os.getcwd()
@@ -123,8 +128,8 @@ try:
       responses += process.communicate(input=update)
 
       # log response
+      log.write("\n\nExit code: %s\n" % process.returncode)
       log.write("\nHook response:\n%s\n" % "\n".join(responses[-2:]))
-      log.write("\nExit code: %s\n" % process.returncode)
 
     print("Status: 200 OK\r\nContent-Type: text/plain\r\n\r\n%s" %
       "\n".join(responses))
