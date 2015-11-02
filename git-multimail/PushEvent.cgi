@@ -83,12 +83,19 @@ try:
       raise Failure(202, 'Accepted', 'Pong')
 
     # fetch updates from commit
-    process = Popen(['git', '-C', repository, 'fetch', event['ref']],
-      stdout=PIPE)
-    response = process.communicate()[0]
+    cmd = ['git', '-C', repository, 'fetch', 'origin', event['ref']]
+    if event.get('forced', False): cmd.insert(4, '--force')
+    process = Popen(cmd, stdout=PIPE, stderr=PIPE)
+    responses = process.communicate()
+
+    # log response
+    log.write("\nFetch response:\n%s\n" % "\n".join(responses[-2:]))
+    log.write("\nExit code: %s\n" % process.returncode)
+
+    # stop if fetch failed
     if process.returncode != 0:
       raise Failure(500, 'Internal error',
-        "git fetch rc=%d\n%s" % (process.returncode, response))
+        "git fetch rc=%d\n%s" % (process.returncode, "\n".join(responses)))
 
     # locate hook
     hook = repository
@@ -102,19 +109,25 @@ try:
       log.write(update)
 
       # copy event information into environment variables
-      for key, value in event:
+      for key, value in event.items():
         os.environ['WEBHOOK_%s' % key.upper()] = json.dumps(value)
 
       # invoke post-receive hook
       # NOTE: stderr will show up in the web server's error log
-      process = Popen([hook], stdin=PIPE, stdout=PIPE)
-      response = process.communicate(input=update)[0]
+      cwd = os.getcwd()
+      try:
+        os.chdir(repository)
+        process = Popen([hook], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+      finally:
+        os.chdir(cwd)
+      responses += process.communicate(input=update)
 
       # log response
-      log.write("\nHook response:\n%s\n" % response)
+      log.write("\nHook response:\n%s\n" % "\n".join(responses[-2:]))
       log.write("\nExit code: %s\n" % process.returncode)
 
-    print("Status: 200 OK\r\nContent-Type: text/plain\r\n\r\nOK")
+    print("Status: 200 OK\r\nContent-Type: text/plain\r\n\r\n%s" %
+      "\n".join(responses))
 
   elif not token:
 
