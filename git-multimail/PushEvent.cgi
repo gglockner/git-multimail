@@ -113,9 +113,9 @@ try:
         os.environ['WEBHOOK_%s' % key.upper()] = json.dumps(value)
 
       log.write("\nEnvironment variables passed to webhook\n")
-      for key, value in os.environment.items():
+      for key, value in os.environ.items():
         if key.startswith('WEBHOOK_'):
-           log.write("%s=%s\n", (key, value))
+           log.write("%s=%s\n" % (key, value))
 
       # invoke post-receive hook
       # NOTE: stderr will show up in the web server's error log
