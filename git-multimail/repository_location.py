@@ -21,6 +21,7 @@ paths = [
 if paths:
   from glob import glob
   import os
+  import re
 
   try:
     from StringIO import StringIO
