@@ -53,13 +53,13 @@ if paths:
       except ConfigParserError:
         continue
 
-      # extract repository name (support both SSL and HTTPS formatted git names)
+      # extract repository name (support both SSH and HTTP(S) formatted git names)
       repo = None
-      if url.endswith('.git'):
-        if url.startswith('git@github.com:'):
-          repo = url[15:-4]
-        elif url.startswith('https://github.com/'):
-          repo = url[19:-4]
+      for pat in ['git@[^:]+:(.+)\.git', 'https?://[^/]+/(.+)\.git']:
+        obj = re.match(pat, url)
+        if obj:
+          repo = obj.group(1)
+          break
 
       # add repository to repository_location
       if repo:
