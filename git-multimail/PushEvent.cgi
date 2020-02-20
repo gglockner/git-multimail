@@ -25,11 +25,12 @@ try:
 except ImportError:
   from urllib import unquote_plus
 
+enc = os.environ.get('LANG', 'utf-8').split(".")[-1]
 ########################################################################
 
 # Shared secret with GitHub.  Should NOT be encoded in this script.  See:
 # https://developer.github.com/webhooks/securing/
-token = os.environ.get('UNIQUE_ID', '')
+token = bytes(os.environ.get('UNIQUE_ID', ''), enc)
 
 ########################################################################
 
@@ -47,7 +48,7 @@ try:
     if payload.startswith('payload='): payload=unquote_plus(payload[8:])
 
     # compute signature
-    signature = 'sha1=' + hmac.new(token, payload, hashlib.sha1).hexdigest()
+    signature = 'sha1=' + hmac.new(token, bytes(payload, enc), hashlib.sha1).hexdigest()
 
     # if logs directory present, open log, otherwise open devnull
     if os.path.isdir('logs'):
@@ -79,7 +80,7 @@ try:
       raise Failure(422, 'No repository', 'Repository not found')
 
     # quick exit for ping requests
-    if event.has_key('zen') and not event.has_key('ref'):
+    if 'zen' in event and not 'ref' in event:
       raise Failure(202, 'Accepted', 'Pong')
 
     # fetch updates from commit
