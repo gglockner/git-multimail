@@ -12,7 +12,7 @@
 #
 
 from __future__ import print_function
-import hashlib, hmac, json, os, sys, traceback
+import hashlib, hmac, json, os, sys, traceback, logging
 from subprocess import Popen, PIPE, STDOUT
 
 try:
@@ -54,29 +54,31 @@ try:
     # compute signature
     signature = 'sha1=' + hmac.new(token, bytes(payload, enc), hashlib.sha1).hexdigest()
 
-    # if logs directory present, open log, otherwise open devnull
+    # if logs directory present, open log as file
+    logargs = {'format': "%(asctime)s %(levelname)s: %(message)s",
+               'level': 'INFO'}
     if os.path.isdir('logs'):
-      log = open('logs/' + signature[5:], 'w')
-    else:
-      log = open(os.devnull, 'w')
+      logargs['filename']='logs/' + signature[5:]
+      logargs['level']='DEBUG'
+    logging.basicConfig(**logargs)
 
     # write log
-    log.write(json.dumps(dict(os.environ), indent=2, sort_keys=True))
-    log.write("\n\nSignature expected: %s\n\n" % repr(signature))
-    log.write(payload)
+    logging.debug(json.dumps(dict(os.environ), indent=2, sort_keys=True))
+    logging.debug("Signature expected: %s" % repr(signature))
+    logging.debug(payload)
 
     # validate signature
     if token and os.environ.get('HTTP_X_HUB_SIGNATURE', '') != signature:
-      log.write("\n\nBAD Signature")
+      logging.error("BAD Signature")
       raise Failure(422, 'Bad Signature', 'Signature does not match')
-    log.write("\n\nSignature OK")
+    logging.info("Signature OK")
 
     # parse payload as JSON
     event = json.loads(payload)
 
     # log parsed results
-    log.write("\n\nParsed event:\n")
-    log.write(json.dumps(event, indent=2))
+    logging.debug("Parsed event:")
+    logging.debug(json.dumps(event, indent=2))
 
     # look up path to repository
     repository = repository_location[event['repository']['full_name']]
@@ -95,8 +97,8 @@ try:
     respstr = bit2sit(responses)
 
     # log response
-    log.write("\n\Exit code: %s\n" % process.returncode)
-    log.write("\nFetch response:\n%s\n" % "\n".join(respstr[-2:]))
+    logging.info("Exit code: %s" % process.returncode)
+    logging.debug("Fetch response: %s" % "\n".join(respstr[-2:]))
 
     # stop if fetch failed
     if process.returncode != 0:
@@ -111,17 +113,17 @@ try:
     if os.path.exists(hook):
       # gather and log input for post-receive hook
       update = "%(before)s %(after)s %(ref)s\n" % event
-      log.write("\n\nData to be passed to post-receive hook:\n")
-      log.write(update)
+      logging.debug("Data to be passed to post-receive hook:")
+      logging.debug(update)
 
       # copy event information into environment variables
       for key, value in event.items():
         os.environ['WEBHOOK_%s' % key.upper()] = json.dumps(value)
 
-      log.write("\nEnvironment variables passed to webhook\n")
+      logging.debug("Environment variables passed to webhook")
       for key, value in os.environ.items():
         if key.startswith('WEBHOOK_'):
-           log.write("%s=%s\n" % (key, value))
+           logging.debug("%s=%s" % (key, value))
 
       # invoke post-receive hook
       # NOTE: stderr will show up in the web server's error log
@@ -135,8 +137,8 @@ try:
       respstr = bit2sit(responses)
 
       # log response
-      log.write("\n\nExit code: %s\n" % process.returncode)
-      log.write("\nHook response:\n%s\n" % "\n".join(respstr[-2:]))
+      logging.info("Exit code: %s" % process.returncode)
+      logging.debug("Hook response: %s" % "\n".join(respstr[-2:]))
 
     print("Status: 200 OK\r\nContent-Type: text/plain\r\n\r\n%s" %
       "\n".join(respstr))
@@ -174,7 +176,14 @@ try:
 
 except Failure as failure:
   print("Status: %d %s\r\nContent-Type: text/plain\r\n\r\n%s" % failure.args)
+  msg = "Status: %d %s (%s)" % failure.args
+  if failure.args[0] >= 300:
+    logging.error(msg)
+  else:
+    logging.info(msg)
 
 except:
   print("Status: 500 Internal error\r\nContent-Type: text/plain\r\n\r")
-  traceback.print_exc(file=sys.stdout)
+  msg = traceback.format_exc()
+  print(msg)
+  logging.critical(msg)
