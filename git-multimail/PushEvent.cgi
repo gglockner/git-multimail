@@ -34,6 +34,10 @@ token = bytes(os.environ.get('UNIQUE_ID', ''), enc)
 
 ########################################################################
 
+# convert iterable of bytes to list of strings
+def bit2sit(bi):
+  return list(map(str, bi, [enc]*len(bi)))
+
 class Failure(Exception): pass
 
 try:
@@ -88,15 +92,16 @@ try:
     if event.get('forced', False): cmd.insert(4, '--force')
     process = Popen(cmd, stdout=PIPE, stderr=PIPE)
     responses = process.communicate()
+    respstr = bit2sit(responses)
 
     # log response
     log.write("\n\Exit code: %s\n" % process.returncode)
-    log.write("\nFetch response:\n%s\n" % "\n".join(responses[-2:]))
+    log.write("\nFetch response:\n%s\n" % "\n".join(respstr[-2:]))
 
     # stop if fetch failed
     if process.returncode != 0:
       raise Failure(500, 'Internal error',
-        "git fetch rc=%d\n%s" % (process.returncode, "\n".join(responses)))
+        "git fetch rc=%d\n%s" % (process.returncode, "\n".join(respstr)))
 
     # locate hook
     hook = repository
@@ -126,14 +131,15 @@ try:
         process = Popen([hook], stdin=PIPE, stdout=PIPE, stderr=PIPE)
       finally:
         os.chdir(cwd)
-      responses += process.communicate(input=update)
+      responses += process.communicate(input=bytes(update, enc))
+      respstr = bit2sit(responses)
 
       # log response
       log.write("\n\nExit code: %s\n" % process.returncode)
-      log.write("\nHook response:\n%s\n" % "\n".join(responses[-2:]))
+      log.write("\nHook response:\n%s\n" % "\n".join(respstr[-2:]))
 
     print("Status: 200 OK\r\nContent-Type: text/plain\r\n\r\n%s" %
-      "\n".join(responses))
+      "\n".join(respstr))
 
   elif not token:
 
